@@ -180,7 +180,7 @@ class PDQNAgent(Agent):
         self.action_max = torch.from_numpy(np.ones((self.num_actions,))).float().to(device)
         self.action_min = -self.action_max.detach()
         self.action_range = (self.action_max-self.action_min).detach()
-        print([self.action_space.spaces[i].high for i in range(1,self.num_actions+1)])
+        # print([self.action_space.spaces[i].high for i in range(1,self.num_actions+1)])
         self.action_parameter_max_numpy = np.concatenate([self.action_space.spaces[i].high for i in range(1,self.num_actions+1)]).ravel()
         self.action_parameter_min_numpy = np.concatenate([self.action_space.spaces[i].low for i in range(1,self.num_actions+1)]).ravel()
         self.action_parameter_range_numpy = (self.action_parameter_max_numpy - self.action_parameter_min_numpy)
@@ -222,7 +222,7 @@ class PDQNAgent(Agent):
         self.use_ornstein_noise = use_ornstein_noise
         self.noise = OrnsteinUhlenbeckActionNoise(self.action_parameter_size, random_machine=self.np_random, mu=0., theta=0.15, sigma=0.0001) #, theta=0.01, sigma=0.01)
 
-        print(self.num_actions+self.action_parameter_size)
+        # print(self.num_actions+self.action_parameter_size)
         self.replay_memory = Memory(replay_memory_size, observation_space.shape, (1+self.action_parameter_size,), next_actions=False)
         self.actor = actor_class(self.observation_space.shape[0], self.num_actions, self.action_parameter_size, **actor_kwargs).to(device)
         self.actor_target = actor_class(self.observation_space.shape[0], self.num_actions, self.action_parameter_size, **actor_kwargs).to(device)
@@ -266,13 +266,13 @@ class PDQNAgent(Agent):
 
     def set_action_parameter_passthrough_weights(self, initial_weights, initial_bias=None):
         passthrough_layer = self.actor_param.action_parameters_passthrough_layer
-        print(initial_weights.shape)
-        print(passthrough_layer.weight.data.size())
+        # print(initial_weights.shape)
+        # print(passthrough_layer.weight.data.size())
         assert initial_weights.shape == passthrough_layer.weight.data.size()
         passthrough_layer.weight.data = torch.Tensor(initial_weights).float().to(self.device)
         if initial_bias is not None:
-            print(initial_bias.shape)
-            print(passthrough_layer.bias.data.size())
+            # print(initial_bias.shape)
+            # print(passthrough_layer.bias.data.size())
             assert initial_bias.shape == passthrough_layer.bias.data.size()
             passthrough_layer.bias.data = torch.Tensor(initial_bias).float().to(self.device)
         passthrough_layer.requires_grad = False
@@ -327,7 +327,7 @@ class PDQNAgent(Agent):
                                                               self.action_parameter_max_numpy))
             else:
                 # select maximum action
-                Q_a = self.actor.forward(state.unsqueeze(0), all_action_parameters.unsqueeze(0))
+                Q_a = self.actor.forward(state.unsqueeze(0), all_action_parameters) # .unsqueeze(0) -> NO because self.actor_param.forward(state) return already a batch
                 Q_a = Q_a.detach().cpu().data.numpy()
                 action = np.argmax(Q_a)
 
