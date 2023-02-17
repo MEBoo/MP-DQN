@@ -323,8 +323,8 @@ class PDQNAgent(Agent):
             if rnd < self.epsilon:
                 action = self.np_random.choice(self.num_actions)
                 if not self.use_ornstein_noise:
-                    all_action_parameters = torch.from_numpy(np.random.uniform(self.action_parameter_min_numpy,
-                                                              self.action_parameter_max_numpy))
+                    all_action_parameters = torch.from_numpy([np.random.uniform(self.action_parameter_min_numpy,
+                                                              self.action_parameter_max_numpy)])
             else:
                 # select maximum action
                 Q_a = self.actor.forward(state.unsqueeze(0), all_action_parameters) # .unsqueeze(0) -> NO because self.actor_param.forward(state) return already a batch
@@ -335,10 +335,10 @@ class PDQNAgent(Agent):
             all_action_parameters = all_action_parameters.cpu().data.numpy()
             offset = np.array([self.action_parameter_sizes[i] for i in range(action)], dtype=int).sum()
             if self.use_ornstein_noise and self.noise is not None:
-                all_action_parameters[offset:offset + self.action_parameter_sizes[action]] += self.noise.sample()[offset:offset + self.action_parameter_sizes[action]]
-            action_parameters = all_action_parameters[offset:offset+self.action_parameter_sizes[action]]
+                all_action_parameters[:,offset:offset + self.action_parameter_sizes[action]] += self.noise.sample()[offset:offset + self.action_parameter_sizes[action]]
+            action_parameters = all_action_parameters[:,offset:offset+self.action_parameter_sizes[action]]
 
-        return action, action_parameters, all_action_parameters
+        return action, action_parameters.squeeze(0), all_action_parameters.squeeze(0)
 
     def _zero_index_gradients(self, grad, batch_action_indices, inplace=True):
         assert grad.shape[0] == batch_action_indices.shape[0]
