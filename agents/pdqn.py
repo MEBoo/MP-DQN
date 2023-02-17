@@ -316,15 +316,15 @@ class PDQNAgent(Agent):
     def act(self, state):
         with torch.no_grad():
             state = torch.from_numpy(state).to(self.device)
-            all_action_parameters = self.actor_param.forward(state)
+            all_action_parameters = self.actor_param.forward(state) # outputs batch of size 1
 
             # Hausknecht and Stone [2016] use epsilon greedy actions with uniform random action-parameter exploration
             rnd = self.np_random.uniform()
             if rnd < self.epsilon:
                 action = self.np_random.choice(self.num_actions)
                 if not self.use_ornstein_noise:
-                    all_action_parameters = torch.from_numpy([np.random.uniform(self.action_parameter_min_numpy,
-                                                              self.action_parameter_max_numpy)])
+                    all_action_parameters = torch.from_numpy(np.asarray([np.random.uniform(self.action_parameter_min_numpy,
+                                                              self.action_parameter_max_numpy)]))
             else:
                 # select maximum action
                 Q_a = self.actor.forward(state.unsqueeze(0), all_action_parameters) # .unsqueeze(0) -> NO because self.actor_param.forward(state) return already a batch
