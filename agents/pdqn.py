@@ -323,7 +323,7 @@ class PDQNAgent(Agent):
             # Hausknecht and Stone [2016] use epsilon greedy actions with uniform random action-parameter exploration
             rnd = self.np_random.uniform()
             if rnd < self.epsilon:
-                action = self.np_random.choices(self.num_actions, self.action_probability)[0]
+                action = self.np_random.choice(self.num_actions, p=self.action_probability)
                 
                 if not self.use_ornstein_noise:
                     all_action_parameters = torch.from_numpy(np.asarray([np.random.uniform(self.action_parameter_min_numpy,
