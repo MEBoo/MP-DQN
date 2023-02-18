@@ -148,6 +148,7 @@ class PDQNAgent(Agent):
                  action_space,
                  actor_class=QActor,
                  actor_kwargs={},
+                 action_probability=None,
                  actor_param_class=ParamActor,
                  actor_param_kwargs={},
                  epsilon_initial=1.0,
@@ -180,6 +181,7 @@ class PDQNAgent(Agent):
         self.action_max = torch.from_numpy(np.ones((self.num_actions,))).float().to(device)
         self.action_min = -self.action_max.detach()
         self.action_range = (self.action_max-self.action_min).detach()
+        self.action_probability = action_probability
         # print([self.action_space.spaces[i].high for i in range(1,self.num_actions+1)])
         self.action_parameter_max_numpy = np.concatenate([self.action_space.spaces[i].high for i in range(1,self.num_actions+1)]).ravel()
         self.action_parameter_min_numpy = np.concatenate([self.action_space.spaces[i].low for i in range(1,self.num_actions+1)]).ravel()
@@ -321,7 +323,8 @@ class PDQNAgent(Agent):
             # Hausknecht and Stone [2016] use epsilon greedy actions with uniform random action-parameter exploration
             rnd = self.np_random.uniform()
             if rnd < self.epsilon:
-                action = self.np_random.choice(self.num_actions)
+                action = self.np_random.choices(self.num_actions, self.action_probability)[0]
+                
                 if not self.use_ornstein_noise:
                     all_action_parameters = torch.from_numpy(np.asarray([np.random.uniform(self.action_parameter_min_numpy,
                                                               self.action_parameter_max_numpy)]))
