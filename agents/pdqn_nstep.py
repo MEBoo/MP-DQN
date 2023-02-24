@@ -144,9 +144,12 @@ class PDQNNStepAgent(PDQNAgent):
     def __init__(self,
                  *args,
                  beta=0.5,
+                 future_reward_positive_only=False,
                  **kwargs):
         super().__init__(*args, actor_class=QActorNonDueling, actor_param_class=ParamActor, **kwargs)
         self.beta = beta
+        self.future_reward_positive_only = future_reward_positive_only
+        
         assert (self.weighted ^ self.average ^ self.random_weighted) or not (
                 self.weighted or self.average or self.random_weighted)
         self.replay_memory = MemoryNStepReturns(self.replay_memory_size, self.observation_space.shape,
@@ -180,14 +183,21 @@ class PDQNNStepAgent(PDQNAgent):
 
         # ---------------------- optimise critic ----------------------
         with torch.no_grad():
-            pred_next_action_parameters = self.actor_param_target.forward(next_states)
-            pred_Q_a = self.actor_target(next_states, pred_next_action_parameters)
-            Qprime = torch.max(pred_Q_a, 1, keepdim=True)[0].squeeze()
-
-            # compute TD error
-            off_policy_target = rewards + (1 - terminals) * self.gamma * Qprime
             on_policy_target = n_step_returns.squeeze()
-            target = self.beta * on_policy_target + (1. - self.beta) * off_policy_target
+            if self.beta > 0:
+                # compute TD error
+                pred_next_action_parameters = self.actor_param_target.forward(next_states)
+                pred_Q_a = self.actor_target(next_states, pred_next_action_parameters)
+                Qprime = torch.max(pred_Q_a, 1, keepdim=True)[0].squeeze()
+
+                if self.future_reward_positive_only:
+                    Qprime = Qprime[Qprime < 0] = 0 # todo -> make zero on dim=1 
+
+                off_policy_target = rewards + (1 - terminals) * self.gamma * Qprime
+            
+                target = self.beta * on_policy_target + (1. - self.beta) * off_policy_target
+            else:
+                target = on_policy_target
 
         # compute current Q-values using policy network
         q_values = self.actor(states, action_parameters)
@@ -253,5 +263,6 @@ class PDQNNStepAgent(PDQNAgent):
 
         self.actor_param_optimiser.step() # aggiorno i pesi
 
-        soft_update_target_network(self.actor_param, self.actor_param_target, self.tau_actor_param)
-        soft_update_target_network(self.actor, self.actor_target, self.tau_actor)
+        if self.beta > 0:
+            soft_update_target_network(self.actor_param, self.actor_param_target, self.tau_actor_param)
+            soft_update_target_network(self.actor, self.actor_target, self.tau_actor)
