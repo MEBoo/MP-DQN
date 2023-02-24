@@ -164,8 +164,7 @@ class PDQNNStepAgent(PDQNAgent):
         self.replay_memory.append(state, action, reward, next_state, terminal=terminal, n_step_return=n_step_return)
 
     def _optimize_td_loss(self):
-        if self.replay_memory.nb_entries < self.batch_size or \
-                self.replay_memory.nb_entries < self.initial_memory_threshold:
+        if self.replay_memory.nb_entries < self.batch_size or self.replay_memory.nb_entries < self.initial_memory_threshold:
             return
         # Sample a batch from replay memory
         states, actions, rewards, next_states, terminals, n_step_returns = self.replay_memory.sample(self.batch_size, random_machine=self.np_random)
@@ -202,7 +201,12 @@ class PDQNNStepAgent(PDQNAgent):
             torch.nn.utils.clip_grad_norm_(self.actor.parameters(), self.clip_grad)
         self.actor_optimiser.step()
 
-        # ---------------------- optimise actor ----------------------
+        # ---------------------- optimize actor ----------------------
+        # ricalcolo i Q-Values con gli action_params rigenerati dallo stato
+        # il gradiente viene poi ricalcolato fino agli action_params, usando come loss la media della somma negativa dei q-values 
+        # i q-values quindi ora fungono da CRITIC
+        # il param_actor quindi cercherà di migliorare i parametri andando cercando di aumentare i valori dei q_values
+
         with torch.no_grad():
             action_params = self.actor_param(states)
         action_params.requires_grad = True
@@ -223,28 +227,31 @@ class PDQNNStepAgent(PDQNAgent):
             weights /= np.linalg.norm(weights)
             weights = torch.from_numpy(weights).float().to(self.device)
             Q_val = weights * Q
+
         if self.indexed:
-            Q_indexed = Q_val.gather(1, actions.unsqueeze(1))
+            Q_indexed = Q_val.gather(1, actions.unsqueeze(1)) # usa per la loss solo la media dei soli q-values i relativi alle'azioni scelte
             Q_loss = torch.mean(Q_indexed)
         else:
-            Q_loss = torch.mean(torch.sum(Q_val, 1))
+            Q_loss = torch.mean(torch.sum(Q_val, 1)) # la loss è la media della somma dei Q-values di tutte le azioni [CRITIC]
+
         self.actor.zero_grad()
-        Q_loss.backward()
+        Q_loss.backward() # passo di backward per calcolare il gradiente fino agli action_params
         from copy import deepcopy
-        delta_a = deepcopy(action_params.grad.data)
+        delta_a = deepcopy(action_params.grad.data) # mi salvo il gradiente degli action_params
         # step 2
-        action_params = self.actor_param(Variable(states))
+        action_params = self.actor_param(Variable(states)) # ricacolo action_params per abilitare il gradiente su tutto actor_param
+
         delta_a[:] = self._invert_gradients(delta_a, action_params, grad_type="action_parameters", inplace=True)
         if self.zero_index_gradients:
             delta_a[:] = self._zero_index_gradients(delta_a, batch_action_indices=actions, inplace=True)
 
-        out = -torch.mul(delta_a, action_params)
+        out = -torch.mul(delta_a, action_params) # la loss è la moltiplicazione del gradiente inverso x i parametri (= i parametri aggiornati)
         self.actor_param.zero_grad()
-        out.backward(torch.ones(out.shape).to(device))
+        out.backward(torch.ones(out.shape).to(device)) # ricalcolo il gradiente
         if self.clip_grad > 0:
             torch.nn.utils.clip_grad_norm_(self.actor_param.parameters(), self.clip_grad)
 
-        self.actor_param_optimiser.step()
+        self.actor_param_optimiser.step() # aggiorno i pesi
 
         soft_update_target_network(self.actor_param, self.actor_param_target, self.tau_actor_param)
         soft_update_target_network(self.actor, self.actor_target, self.tau_actor)
